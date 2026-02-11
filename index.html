@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>SailCast</title>
+</head>
+<body>
+  <h1>SailCast MVP</h1>
+  <button onclick="load()">Load Forecast</button>
+  <pre id="out"></pre>
+
+<script>
+async function load() {
+  const res = await fetch('/api/forecast?lat=-37.8676&lon=144.9741');
+  const data = await res.json();
+  document.getElementById('out').textContent = JSON.stringify(data, null, 2);
+}
+</script>
+</body>
+</html>
