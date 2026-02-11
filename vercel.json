@@ -1,0 +1,15 @@
+{
+  "buildCommand": "",
+  "outputDirectory": "public",
+  "rewrites": [
+    { "source": "/api/forecast", "destination": "/api/forecast" }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "s-maxage=7200, stale-while-revalidate=3600" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "sailcast",
+  "version": "1.0.0",
+  "description": "Sailing conditions forecast for Port Phillip Bay",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev"
+  }
+}
