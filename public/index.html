@@ -2,20 +2,100 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>SailCast</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SailCast MVP</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 20px; }
+    button { padding: 10px 12px; }
+    pre { background:#f6f6f6; padding:12px; border-radius:8px; overflow:auto; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+    th, td { border-bottom: 1px solid #ddd; padding: 8px; font-size: 13px; text-align: left; }
+  </style>
 </head>
 <body>
   <h1>SailCast MVP</h1>
-  <button onclick="load()">Load Forecast</button>
-  <pre id="out"></pre>
+  <button id="btn">Load Forecast</button>
+  <div id="status"></div>
+  <div id="err" style="color:#b00020;"></div>
+
+  <table id="tbl" style="display:none;">
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Wind (m/s)</th>
+        <th>Gust (m/s)</th>
+        <th>Dir (°)</th>
+        <th>Rain (mm)</th>
+        <th>Cloud (%)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <details style="margin-top:12px;">
+    <summary>Raw JSON</summary>
+    <pre id="out"></pre>
+  </details>
 
 <script>
+const btn = document.getElementById('btn');
+const out = document.getElementById('out');
+const err = document.getElementById('err');
+const status = document.getElementById('status');
+const tbl = document.getElementById('tbl');
+const tbody = tbl.querySelector('tbody');
+
 async function load() {
-  const res = await fetch('/api/forecast?lat=-37.8676&lon=144.9741');
-  const data = await res.json();
-  document.getElementById('out').textContent = JSON.stringify(data, null, 2);
+  err.textContent = "";
+  status.textContent = "Loading…";
+  out.textContent = "";
+  tbl.style.display = "none";
+  tbody.innerHTML = "";
+
+  try {
+    const res = await fetch('/api/forecast?lat=-37.8676&lon=144.9741');
+    const text = await res.text();
+
+    if (!res.ok) {
+      err.textContent = `HTTP ${res.status}: ${text}`;
+      status.textContent = "";
+      return;
+    }
+
+    const data = JSON.parse(text);
+    out.textContent = JSON.stringify(data, null, 2);
+
+    const h = data.hourly || {};
+    const times = h.time || [];
+    const wind = h.wind_speed_10m || [];
+    const gust = h.wind_gusts_10m || [];
+    const dir  = h.wind_direction_10m || [];
+    const rain = h.precipitation || [];
+    const cloud = h.cloud_cover || [];
+
+    const n = Math.min(24, times.length);
+    for (let i = 0; i < n; i++) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${times[i] ?? ""}</td>
+        <td>${wind[i] ?? ""}</td>
+        <td>${gust[i] ?? ""}</td>
+        <td>${dir[i] ?? ""}</td>
+        <td>${rain[i] ?? ""}</td>
+        <td>${cloud[i] ?? ""}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    tbl.style.display = "";
+    status.textContent = `Updated: ${data?.meta?.generated_at ?? ""} (${data?.meta?.timezone ?? ""})`;
+  } catch (e) {
+    err.textContent = e?.message || String(e);
+    status.textContent = "";
+  }
 }
+
+btn.addEventListener('click', load);
 </script>
 </body>
 </html>
-
