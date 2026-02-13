@@ -587,16 +587,24 @@ async function loadLiveForecast(lat, lon) {
     });
   }
 
-  const labels=["Today","Tomorrow","Thu","Fri","Sat","Sun","Mon"];
-  const arr=Object.values(days).slice(0,7);
-  arr.forEach((d,i)=>{
-    d.label = labels[i] ? (labels[i] + (i>=2? " "+d.date.slice(8,10)+"/"+d.date.slice(5,7) : "")) : d.date;
-    d.hours.sort((a,b)=>a.h-b.h);
-    d.hours = d.hours.filter(h=>h.h>=5 && h.h<=20);
-    if(d.hours.length>16) d.hours = d.hours.slice(0,16);
-  });
+  const dayKeys = Object.keys(days).sort();          // ✅ chronological by YYYY-MM-DD
+const arr = dayKeys.slice(0, 7).map(k => days[k]); // ✅ next 7 days deterministically
 
-  return arr;
+const labels=["Today","Tomorrow","Thu","Fri","Sat","Sun","Mon"];
+arr.forEach((d,i)=>{
+  d.label = labels[i]
+    ? (labels[i] + (i>=2 ? ` ${d.date.slice(8,10)}/${d.date.slice(5,7)}` : ""))
+    : d.date;
+
+  d.hours.sort((a,b)=>a.h-b.h);
+  d.hours = d.hours.filter(h=>h.h>=5 && h.h<=20);
+
+  // if the day became empty after filtering, keep it but with empty hours
+  if(d.hours.length>16) d.hours = d.hours.slice(0,16);
+});
+
+return arr;
+
 }
 
 async function loadAndRender(){
