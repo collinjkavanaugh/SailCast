@@ -1,9 +1,4 @@
 {
-  "buildCommand": "",
-  "outputDirectory": "public",
-  "rewrites": [
-    { "source": "/api/forecast", "destination": "/api/forecast" }
-  ],
   "headers": [
     {
       "source": "/api/(.*)",
