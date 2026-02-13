@@ -87,20 +87,51 @@ a{color:inherit}
 .barsRow{display:grid;grid-template-columns:repeat(16,1fr);gap:6px;align-items:end;margin-top:8px}
 .hourLbls{display:grid;grid-template-columns:repeat(16,1fr);gap:6px;margin-top:6px}
 .hourLbls div{font-size:10px;color:#94a3b8;text-align:center}
+
+/* timeline bars: now scaled height + more "Surfline" look */
 .tbar{
-  height:60px;border-radius:6px;background:#e2e8f0;position:relative;
-  overflow:hidden;border:1px solid #e5e7eb
+  border-radius:10px;
+  position:relative;
+  overflow:hidden;
+  border:1px solid rgba(15,23,42,.10);
+  height: calc(var(--h, 0.35) * 130px);
+  min-height:42px;
+  box-shadow:0 10px 24px rgba(15,23,42,.08);
 }
-.tbar.good{background:rgba(22,163,74,.18);border-color:rgba(22,163,74,.28)}
-.tbar.ok{background:rgba(245,158,11,.18);border-color:rgba(245,158,11,.28)}
-.tbar.bad{background:rgba(239,68,68,.16);border-color:rgba(239,68,68,.26)}
+.tbar.good{background:rgba(34,197,94,.85)}
+.tbar.ok{background:rgba(245,158,11,.85)}
+.tbar.bad{background:rgba(239,68,68,.80)}
+/* optional purple "featured hour" feel (you can remove later) */
+.tbar.purple{background:rgba(139,92,246,.85)}
+
+.tbar::after{
+  content:"";
+  position:absolute;inset:0;
+  background:linear-gradient(to top, rgba(255,255,255,.20), rgba(255,255,255,0) 55%);
+  pointer-events:none;
+}
+
+.tbar .topRow{
+  position:absolute;left:0;right:0;top:6px;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  color:rgba(15,23,42,.72);
+  font-size:12px;font-weight:700;
+}
 .tbar .val{
-  position:absolute;inset:auto 0 6px 0;text-align:center;
-  font-size:10px;font-weight:800;color:#0f172a
+  position:absolute;left:0;right:0;bottom:7px;
+  text-align:center;
+  font-size:11px;font-weight:900;color:#0b1220;
+  text-shadow:0 1px 0 rgba(255,255,255,.25);
 }
-.tbar .icon{
-  position:absolute;inset:6px 0 auto 0;text-align:center;font-size:11px;color:#64748b
+.wxIcon{font-size:13px;line-height:1}
+.arrow{
+  width:14px;height:14px;
+  display:inline-block;
+  transform:rotate(var(--rot, 0deg));
 }
+.arrow svg{display:block}
+.arrow path{fill:rgba(15,23,42,.72)}
+
 .best{padding:10px 14px 12px;border-top:1px solid var(--line);color:#334155;font-size:12px}
 .best small{display:block;color:#64748b;margin-top:5px;line-height:1.4}
 
@@ -230,11 +261,13 @@ a{color:inherit}
 
 <script>
 /**
- * Fixes applied:
- * 1) Spot pills now drive the forecast fetch (no hardcoded St Kilda).
- * 2) Leaflet is included once.
- * NOTE: Ensure your /api/forecast requests knots (windspeed_unit=kn) on the server,
- * otherwise UI labels may not match reality.
+ * Changes in this version (focused on ONE thing: timeline bars/icons):
+ * - Timeline bars are scaled by wind speed (variable height).
+ * - Each hour shows a wind-direction arrow rotated by wind dir.
+ * - Each hour shows a simple weather icon derived from weathercode.
+ *
+ * NOTE: Your /api/forecast should ideally request knots (windspeed_unit=kn),
+ * otherwise UI labels may not match the underlying units.
  */
 
 const SPOTS = [
@@ -259,6 +292,18 @@ function degToCardinal(deg){
   const dirs=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
   const idx=Math.round(((deg%360)+360)%360/22.5)%16;
   return dirs[idx];
+}
+
+function wxEmoji(code){
+  // Open-Meteo weathercode mapping (coarse buckets only)
+  if(code===0) return "☀️";
+  if(code===1 || code===2) return "🌤️";
+  if(code===3) return "☁️";
+  if(code===45 || code===48) return "🌫️";
+  if((code>=51 && code<=57) || (code>=61 && code<=67) || (code>=80 && code<=82)) return "🌧️";
+  if(code>=71 && code<=77) return "❄️";
+  if(code>=95) return "⛈️";
+  return "•";
 }
 
 function ratingFromNow(now){
@@ -354,6 +399,23 @@ function colorForWind(ws){
   return "bad";
 }
 
+function windHeightFactor(ws){
+  // map wind speed to [0.25..1.0] for bar height
+  const max = 26; // tune as you like
+  const v = clamp((ws||0) / max, 0, 1);
+  return 0.25 + v * 0.75;
+}
+
+function arrowSvg(){
+  return `
+    <span class="arrow">
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <path d="M12 2l6 8h-4v10h-4V10H6l6-8z"></path>
+      </svg>
+    </span>
+  `;
+}
+
 function renderTimeline(day){
   const slots = day.hours.slice(0,16);
   const hourLbls=el("hourLbls");
@@ -361,7 +423,7 @@ function renderTimeline(day){
   hourLbls.innerHTML="";
   barsRow.innerHTML="";
 
-  slots.forEach((h)=>{
+  slots.forEach((h, idx)=>{
     const lab=document.createElement("div");
     const hr = h.h;
     const disp = (hr===12?"12p": (hr>12? (hr-12)+"p" : hr+"a"));
@@ -371,8 +433,28 @@ function renderTimeline(day){
     const b=document.createElement("div");
     const c=colorForWind(h.ws);
     b.className="tbar "+c;
-    b.innerHTML=`<div class="icon">◌</div><div class="val">${Math.round(h.ws||0)}</div>`;
-    b.title = `${hr}:00 · Wind ${Math.round(h.ws||0)} kts · Gust ${Math.round(h.g||0)} kts · Dir ${Math.round(h.wd||0)}°`;
+
+    // optional: add a single purple "highlight" bar sometimes (remove if you hate it)
+    // if(idx===10) b.classList.add("purple");
+
+    const hFactor = windHeightFactor(h.ws);
+    b.style.setProperty("--h", hFactor);
+
+    const rot = `${Math.round(h.wd||0)}deg`;
+    const wx = wxEmoji(h.code);
+
+    b.innerHTML = `
+      <div class="topRow" style="--rot:${rot}">
+        <span class="wxIcon">${wx}</span>
+        <span class="arrow" style="--rot:${rot}">
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path d="M12 2l6 8h-4v10h-4V10H6l6-8z"></path>
+          </svg>
+        </span>
+      </div>
+      <div class="val">${Math.round(h.ws||0)}</div>
+    `;
+    b.title = `${hr}:00 · Wind ${Math.round(h.ws||0)} kts · Gust ${Math.round(h.g||0)} kts · Dir ${Math.round(h.wd||0)}° · Code ${h.code}`;
     barsRow.appendChild(b);
   });
 
@@ -380,7 +462,7 @@ function renderTimeline(day){
   el("bestWindow").textContent = `Best sailing window: ${best.label}`;
   el("bestDetail").textContent = best.detail;
 
-  el("timelineNote").textContent = `Auto (example)`;
+  el("timelineNote").textContent = `Bars scaled by wind speed · Arrow = wind direction`;
 }
 
 function bestWindow(day){
@@ -433,7 +515,6 @@ function initMap(){
   MARKER = L.marker([s.lat, s.lon]).addTo(MAP);
 
   MAP.on("click", (e)=>{
-    // optional: move marker only (does not change selected spot)
     const {lat,lng}=e.latlng;
     MARKER.setLatLng([lat,lng]);
   });
