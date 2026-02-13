@@ -157,6 +157,20 @@ a{color:inherit}
 .scaleLabels{display:flex;justify-content:space-between;font-size:10px;color:#64748b;margin-top:6px}
 .footer{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 12px;font-size:10px;color:#94a3b8;border-top:1px solid var(--line)}
 .badge{padding:4px 8px;border-radius:999px;background:#f1f5f9;border:1px solid #e2e8f0;color:#64748b;font-weight:800}
+.status{
+  margin-bottom:10px;
+  padding:10px 12px;
+  border-radius:10px;
+  border:1px solid #fecaca;
+  background:#fef2f2;
+  color:#991b1b;
+  font-size:12px;
+  display:none;
+}
+.tbar:focus-visible{
+  outline:2px solid var(--accent2);
+  outline-offset:2px;
+}
 
 @media (max-width:980px){
   .metrics{grid-template-columns:repeat(2,1fr)}
@@ -170,9 +184,11 @@ a{color:inherit}
 <body>
 <div class="wrap">
 
+  <div class="status" id="statusMsg" role="status" aria-live="polite"></div>
+
   <div class="topbar">
     <div class="pills" id="spotPills"></div>
-    <button class="pill" id="btnMapPin" title="Use map click"><span class="dot"></span> Map</button>
+    <button class="pill" id="btnMapPin" title="Use map click"><span class="dot"></span> Use map pin forecast</button>
   </div>
 
   <section class="hero">
@@ -282,11 +298,27 @@ let ACTIVE_SPOT = 0;
 let ACTIVE_DAY = 0;
 let ACTIVE_LAYER = "wind";
 let MAP, MARKER;
+let USING_CUSTOM_PIN = false;
+let CUSTOM_PIN = null;
 
 let FORECAST = [];
 
 function el(id){return document.getElementById(id);}
 function clamp(n,a,b){return Math.max(a,Math.min(b,n));}
+
+function showStatus(msg){
+  const n = el("statusMsg");
+  n.textContent = msg;
+  n.style.display = msg ? "block" : "none";
+}
+
+function labelForDay(dateStr, idx){
+  if(idx===0) return "Today";
+  if(idx===1) return "Tomorrow";
+  const dt = new Date(`${dateStr}T00:00:00`);
+  const weekday = dt.toLocaleDateString("en-AU", { weekday: "short" });
+  return `${weekday} ${dateStr.slice(8,10)}/${dateStr.slice(5,7)}`;
+}
 
 function degToCardinal(deg){
   const dirs=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
@@ -336,6 +368,8 @@ function renderSpotPills(){
     b.className="pill"+(i===ACTIVE_SPOT?" active":"");
     b.innerHTML=`<span class="dot"></span> ${s.name}`;
     b.onclick=()=>{
+      USING_CUSTOM_PIN = false;
+      CUSTOM_PIN = null;
       ACTIVE_SPOT=i;
       ACTIVE_DAY=0;
       loadAndRender();
@@ -365,7 +399,7 @@ function renderHero(day){
   const r=ratingFromNow(now);
   renderRating(r);
 
-  el("heroDate").textContent = `${day.label} · ${SPOTS[ACTIVE_SPOT].name} · Intermediate`;
+  el("heroDate").textContent = `${day.label} · ${(USING_CUSTOM_PIN ? "Custom map pin" : SPOTS[ACTIVE_SPOT].name)} · Intermediate`;
 
   el("mWind").textContent = Math.round(now.ws||0);
   el("mWindCard").textContent = degToCardinal(now.wd||0);
@@ -375,7 +409,7 @@ function renderHero(day){
   el("mPeriod").textContent = (now.wp!=null? Math.round(now.wp):"—");
 
   el("mDirDeg").textContent = Math.round(now.wd||0);
-  el("mDirCard").textContent = `${degToCardinal(now.wd||0)} (onshore / sea breeze)`;
+  el("mDirCard").textContent = `${degToCardinal(now.wd||0)}`;
 
   el("mTmax").textContent = day.tmax!=null ? Math.round(day.tmax) : "—";
   el("mTmin").textContent = day.tmin!=null ? Math.round(day.tmin) : "—";
@@ -443,6 +477,10 @@ function renderTimeline(day){
     const rot = `${Math.round(h.wd||0)}deg`;
     const wx = wxEmoji(h.code);
 
+    const waveTxt = (h.wv==null ? "—" : (Math.round(h.wv*10)/10).toFixed(1)) + " m";
+    const tempTxt = (h.t==null ? "—" : Math.round(h.t)) + "°c";
+    const rainTxt = (h.pr==null ? "—" : (Math.round(h.pr*10)/10).toFixed(1)) + " mm";
+
     b.innerHTML = `
       <div class="topRow" style="--rot:${rot}">
         <span class="wxIcon">${wx}</span>
@@ -454,7 +492,16 @@ function renderTimeline(day){
       </div>
       <div class="val">${Math.round(h.ws||0)}</div>
     `;
+    b.tabIndex = 0;
+    b.role = "button";
+    b.setAttribute("aria-label", `${disp}, wind ${Math.round(h.ws||0)} knots, gust ${Math.round(h.g||0)} knots, waves ${waveTxt}, rain ${rainTxt}, direction ${Math.round(h.wd||0)} degrees`);
     b.title = `${hr}:00 · Wind ${Math.round(h.ws||0)} kts · Gust ${Math.round(h.g||0)} kts · Dir ${Math.round(h.wd||0)}° · Code ${h.code}`;
+    b.addEventListener("keydown", (event)=>{
+      if(event.key === "Enter" || event.key === " "){
+        event.preventDefault();
+        alert(`${disp}\nWind: ${Math.round(h.ws||0)} kts\nGust: ${Math.round(h.g||0)} kts\nWaves: ${waveTxt}\nTemp: ${tempTxt}\nRain: ${rainTxt}\nDir: ${Math.round(h.wd||0)}° (${degToCardinal(h.wd||0)})`);
+      }
+    });
     barsRow.appendChild(b);
   });
 
@@ -497,8 +544,8 @@ function renderLegend(){
 }
 
 function renderFooter(day){
-  const s=SPOTS[ACTIVE_SPOT];
-  el("footerLeft").textContent = `Showing: ${day.label} · ${s.name}`;
+  const locationName = USING_CUSTOM_PIN ? "Custom map pin" : SPOTS[ACTIVE_SPOT].name;
+  el("footerLeft").textContent = `Showing: ${day.label} · ${locationName}`;
 }
 
 function initMap(){
@@ -517,6 +564,10 @@ function initMap(){
   MAP.on("click", (e)=>{
     const {lat,lng}=e.latlng;
     MARKER.setLatLng([lat,lng]);
+    USING_CUSTOM_PIN = true;
+    CUSTOM_PIN = {lat, lon: lng};
+    ACTIVE_DAY = 0;
+    loadAndRender();
   });
 
   document.querySelectorAll(".layerBtns button").forEach(btn=>{
@@ -533,6 +584,7 @@ function initMap(){
 function updateMarkerPopup(){
   if(!MAP || !MARKER || !FORECAST.length) return;
   const day=FORECAST[ACTIVE_DAY];
+  if(!day || !day.hours || !day.hours.length) return;
   const h=day.hours[0];
   const cfg=legendConfig(ACTIVE_LAYER);
 
@@ -543,7 +595,7 @@ function updateMarkerPopup(){
   if(ACTIVE_LAYER==="waves") val = `${(h.wv!=null? (Math.round(h.wv*10)/10).toFixed(1):"—")} m`;
 
   MARKER.bindPopup(
-    `<b>${SPOTS[ACTIVE_SPOT].name}</b><br>${cfg.title}: <b>${val}</b><br>Dir: ${Math.round(h.wd||0)}° (${degToCardinal(h.wd||0)})`
+    `<b>${USING_CUSTOM_PIN ? "Custom map pin" : SPOTS[ACTIVE_SPOT].name}</b><br>${cfg.title}: <b>${val}</b><br>Dir: ${Math.round(h.wd||0)}° (${degToCardinal(h.wd||0)})`
   );
 }
 
@@ -590,11 +642,8 @@ async function loadLiveForecast(lat, lon) {
   const dayKeys = Object.keys(days).sort();          // ✅ chronological by YYYY-MM-DD
 const arr = dayKeys.slice(0, 7).map(k => days[k]); // ✅ next 7 days deterministically
 
-const labels=["Today","Tomorrow","Thu","Fri","Sat","Sun","Mon"];
 arr.forEach((d,i)=>{
-  d.label = labels[i]
-    ? (labels[i] + (i>=2 ? ` ${d.date.slice(8,10)}/${d.date.slice(5,7)}` : ""))
-    : d.date;
+  d.label = labelForDay(d.date, i);
 
   d.hours.sort((a,b)=>a.h-b.h);
   d.hours = d.hours.filter(h=>h.h>=5 && h.h<=20);
@@ -609,22 +658,57 @@ return arr;
 
 async function loadAndRender(){
   initMap();
+  showStatus("");
 
   const s=SPOTS[ACTIVE_SPOT];
-  MAP.setView([s.lat, s.lon], 10);
-  MARKER.setLatLng([s.lat, s.lon]);
-
-  const arr = await loadLiveForecast(s.lat, s.lon);
-  FORECAST = arr;
-  ACTIVE_DAY = clamp(ACTIVE_DAY,0,FORECAST.length-1);
-
-  renderAll();
+  const point = USING_CUSTOM_PIN && CUSTOM_PIN ? CUSTOM_PIN : {lat: s.lat, lon: s.lon};
+  MAP.setView([point.lat, point.lon], 10);
+  MARKER.setLatLng([point.lat, point.lon]);
+  try {
+    const arr = await loadLiveForecast(point.lat, point.lon);
+    FORECAST = arr;
+    if(!FORECAST.length){
+      showStatus("No forecast data returned for this location yet. Please try another spot.");
+      renderAll();
+      return;
+    }
+    ACTIVE_DAY = clamp(ACTIVE_DAY,0,FORECAST.length-1);
+    renderAll();
+  } catch (err) {
+    console.error(err);
+    FORECAST = [];
+    showStatus("Unable to load forecast data right now. Please retry in a moment.");
+    renderAll();
+  }
 }
 
 function renderAll(){
   renderSpotPills();
   renderDayTabs();
   const day=FORECAST[ACTIVE_DAY];
+  if(!day){
+    el("heroDate").textContent = "No forecast available";
+    el("ratingLabel").textContent = "—";
+    el("ratingSubtitle").textContent = "Forecast data is currently unavailable.";
+    el("mWind").textContent = "—";
+    el("mWindCard").textContent = "—";
+    el("mGust").textContent = "—";
+    el("mWave").textContent = "—";
+    el("mPeriod").textContent = "—";
+    el("mDirDeg").textContent = "—";
+    el("mDirCard").textContent = "—";
+    el("mTmax").textContent = "—";
+    el("mTmin").textContent = "—";
+    el("mTempNote").textContent = "—";
+    el("hourLbls").innerHTML = "";
+    el("barsRow").innerHTML = "";
+    el("timelineNote").textContent = "No hourly data";
+    el("bestWindow").textContent = "Best sailing window: —";
+    el("bestDetail").textContent = "—";
+    el("footerLeft").textContent = "Showing: —";
+    renderLegend();
+    return;
+  }
   renderHero(day);
   renderTimeline(day);
   renderLegend();
@@ -633,7 +717,7 @@ function renderAll(){
 }
 
 document.getElementById("btnMapPin").addEventListener("click", ()=>{
-  alert("Map pin mode: click the map to move the marker (does not change the spot yet).");
+  alert("Map pin mode: click the map to move the marker and load forecast for that pin.");
 });
 
 renderSpotPills();
