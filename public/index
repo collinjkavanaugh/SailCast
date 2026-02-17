@@ -1,1 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SailCast – Port Phillip Bay</title>
 
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+<!-- Leaflet (map) — single include -->
+<link rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+  crossorigin=""/>
+<script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+  crossorigin=""></script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:"DM Sans",system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+:root{
+  --bg:#f4f6fb;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;
+  --accent:#0f172a;--accent2:#2563eb;
+  --good:#16a34a;--ok:#f59e0b;--bad:#ef4444;
+  --chip:#eef2ff;
+}
+body{background:var(--bg);color:var(--text)}
+a{color:inherit}
+.wrap{max-width:1100px;margin:18px auto 40px;padding:0 14px}
+
+.topbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.pills{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.pill{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:7px 12px;border-radius:999px;border:1px solid var(--line);
+  background:#fff;color:var(--accent);font-weight:600;font-size:12px;
+  box-shadow:0 1px 0 rgba(0,0,0,.03);
+  cursor:pointer;
+}
+.pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.pill .dot{width:8px;height:8px;border-radius:50%;background:var(--good)}
+.pill:not(.active) .dot{background:#c7d2fe}
+
+.hero{
+  background:var(--card);border:1px solid var(--line);border-radius:16px;
+  padding:18px 18px 14px;box-shadow:0 6px 22px rgba(15,23,42,.06);
+}
+.hero-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.hero h1{font-size:14px;letter-spacing:.12em;color:#64748b;text-transform:uppercase}
+.hero .date{color:var(--muted);font-size:12px;margin-top:2px}
+.rating{display:flex;align-items:center;gap:10px;margin:10px 0 6px}
+.rating .label{font-size:28px;font-weight:800;color:var(--good);letter-spacing:.02em}
+.rating .bars{display:flex;gap:4px}
+.rating .bar{width:24px;height:10px;border-radius:3px;background:#d1d5db}
+.rating .bar.on{background:var(--good)}
+.subtitle{color:#475569;font-size:12.5px;line-height:1.45;margin-bottom:14px}
+
+.metrics{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  gap:0;border-top:1px solid var(--line);margin-top:10px
+}
+.metric{padding:14px 12px;border-right:1px solid var(--line)}
+.metric:last-child{border-right:none}
+.metric .k{font-size:10px;color:#64748b;font-weight:700;letter-spacing:.12em}
+.metric .v{margin-top:6px;font-size:22px;font-weight:800}
+.metric .s{margin-top:3px;font-size:11.5px;color:#64748b}
+.metric .mono{font-family:"Space Mono",ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
+
+.card{
+  background:var(--card);border:1px solid var(--line);border-radius:16px;
+  margin-top:14px;box-shadow:0 6px 22px rgba(15,23,42,.06);
+}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid var(--line)}
+.tab{
+  padding:7px 10px;border-radius:999px;border:1px solid var(--line);
+  background:#fff;color:#0f172a;font-weight:700;font-size:11px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:8px
+}
+.tab.active{background:var(--chip);border-color:#c7d2fe}
+.tab .tDot{width:7px;height:7px;border-radius:50%;background:var(--good)}
+.tab:not(.active) .tDot{background:#cbd5e1}
+.timeline{padding:12px 14px 10px}
+.timeline-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
+.timeline-title{font-size:10px;color:#64748b;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.timeline-note{font-size:10px;color:#64748b}
+.barsRow{display:grid;grid-template-columns:repeat(16,1fr);gap:6px;align-items:end;margin-top:8px}
+.hourLbls{display:grid;grid-template-columns:repeat(16,1fr);gap:6px;margin-top:6px}
+.hourLbls div{font-size:10px;color:#94a3b8;text-align:center}
+
+/* timeline bars: now scaled height + more "Surfline" look */
+.tbar{
+  border-radius:10px;
+  position:relative;
+  overflow:hidden;
+  border:1px solid rgba(15,23,42,.10);
+  height: calc(var(--h, 0.35) * 130px);
+  min-height:42px;
+  box-shadow:0 10px 24px rgba(15,23,42,.08);
+}
+.tbar.good{background:rgba(34,197,94,.85)}
+.tbar.ok{background:rgba(245,158,11,.85)}
+.tbar.bad{background:rgba(239,68,68,.80)}
+/* optional purple "featured hour" feel (you can remove later) */
+.tbar.purple{background:rgba(139,92,246,.85)}
+
+.tbar::after{
+  content:"";
+  position:absolute;inset:0;
+  background:linear-gradient(to top, rgba(255,255,255,.20), rgba(255,255,255,0) 55%);
+  pointer-events:none;
+}
+
+.tbar .topRow{
+  position:absolute;left:0;right:0;top:6px;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  color:rgba(15,23,42,.72);
+  font-size:12px;font-weight:700;
+}
+.tbar .val{
+  position:absolute;left:0;right:0;bottom:7px;
+  text-align:center;
+  font-size:11px;font-weight:900;color:#0b1220;
+  text-shadow:0 1px 0 rgba(255,255,255,.25);
+}
+.wxIcon{font-size:13px;line-height:1}
+.arrow{
+  width:14px;height:14px;
+  display:inline-block;
+  transform:rotate(var(--rot, 0deg));
+}
+.arrow svg{display:block}
+.arrow path{fill:rgba(15,23,42,.72)}
+
+.best{padding:11px 14px 13px;border-top:1px solid var(--line)}
+.best-summary{font-size:13px;line-height:1.55;color:#334155}
+.best-window{
+  display:inline-flex;align-items:center;gap:5px;
+  margin-top:8px;
+  background:#e0f2fe;border-radius:999px;
+  padding:3px 10px 3px 8px;
+  font-size:11.5px;font-weight:700;color:#0369a1;
+  font-family:"Space Mono",ui-monospace,monospace;
+  letter-spacing:.02em;
+}
+
+.map-head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+.map-head h3{font-size:11px;color:#64748b;font-weight:900;letter-spacing:.12em;text-transform:uppercase}
+.layerBtns{display:flex;gap:6px}
+.layerBtns button{
+  border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 10px;
+  font-size:10px;font-weight:800;color:#0f172a;cursor:pointer
+}
+.layerBtns button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.map-wrap{position:relative}
+#wxMap{height:360px;border-radius:0 0 16px 16px}
+.map-legend{
+  position:absolute;left:12px;bottom:12px;background:rgba(255,255,255,.92);
+  border:1px solid var(--line);border-radius:10px;padding:10px 10px 8px;
+  box-shadow:0 8px 22px rgba(15,23,42,.16);backdrop-filter:blur(6px);
+  width:160px
+}
+.map-legend .lTitle{font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:#334155;margin-bottom:8px}
+.scale{display:flex;gap:2px;align-items:center;margin-top:6px}
+.scale span{height:8px;flex:1;border-radius:2px;background:#e2e8f0}
+.scaleLabels{display:flex;justify-content:space-between;font-size:10px;color:#64748b;margin-top:6px}
+.footer{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 12px;font-size:10px;color:#94a3b8;border-top:1px solid var(--line)}
+.badge{padding:4px 8px;border-radius:999px;background:#f1f5f9;border:1px solid #e2e8f0;color:#64748b;font-weight:800}
+.status{
+  margin-bottom:10px;
+  padding:10px 12px;
+  border-radius:10px;
+  border:1px solid #fecaca;
+  background:#fef2f2;
+  color:#991b1b;
+  font-size:12px;
+  display:none;
+}
+.tbar:focus-visible{
+  outline:2px solid var(--accent2);
+  outline-offset:2px;
+}
+
+@media (max-width:980px){
+  .metrics{grid-template-columns:repeat(2,1fr)}
+  .metric:nth-child(2){border-right:none}
+  .metric:nth-child(1),.metric:nth-child(2){border-bottom:1px solid var(--line)}
+  .barsRow,.hourLbls{grid-template-columns:repeat(8,1fr)}
+}
+</style>
+</head>
+
+<body>
+<div class="wrap">
+
+  <div class="status" id="statusMsg" role="status" aria-live="polite"></div>
+
+  <div class="topbar">
+    <div class="pills" id="spotPills"></div>
+    <button class="pill" id="btnMapPin" title="Use map click"><span class="dot"></span> Use map pin forecast</button>
+  </div>
+
+  <section class="hero">
+    <div class="hero-top">
+      <div>
+        <h1>Sailing Conditions</h1>
+        <div class="rating">
+          <div class="label" id="ratingLabel">GREAT</div>
+          <div class="bars" id="ratingBars"></div>
+        </div>
+        <div class="subtitle" id="ratingSubtitle">
+          Rearrange your day for this. Clean, steady wind in the ideal range, light gusts, flat-to-small chop, and a favourable direction.
+        </div>
+      </div>
+      <div class="date" id="heroDate">—</div>
+    </div>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="k">WIND</div>
+        <div class="v"><span id="mWind">—</span><span class="mono"> kts</span> <span class="mono" id="mWindCard">—</span></div>
+        <div class="s"><span id="mGust">—</span> kts gusts</div>
+      </div>
+      <div class="metric">
+        <div class="k">WAVES</div>
+        <div class="v"><span id="mWave">—</span><span class="mono"> m</span></div>
+        <div class="s"><span id="mPeriod">—</span> s period · Port Phillip Bay</div>
+      </div>
+      <div class="metric">
+        <div class="k">WIND DIRECTION</div>
+        <div class="v"><span id="mDirDeg">—</span><span class="mono">°</span></div>
+        <div class="s"><span id="mDirCard">—</span></div>
+      </div>
+      <div class="metric">
+        <div class="k">DAY TEMPERATURE</div>
+        <div class="v"><span id="mTmax">—</span><span class="mono">°c</span> <span class="mono"> </span> <span id="mTmin">—</span><span class="mono">°c</span></div>
+        <div class="s" id="mTempNote">—</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="tabs" id="dayTabs"></div>
+
+    <div class="timeline">
+      <div class="timeline-head">
+        <div class="timeline-title">Conditions Timeline · click to inspect</div>
+        <div class="timeline-note" id="timelineNote">—</div>
+      </div>
+
+      <div class="hourLbls" id="hourLbls"></div>
+      <div class="barsRow" id="barsRow"></div>
+    </div>
+
+    <div class="best">
+      <div class="best-summary" id="bestSummary">—</div>
+      <div class="best-window" id="bestWindow">⛵ —</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="map-head">
+      <h3>Wind & Weather Map</h3>
+      <div class="layerBtns">
+        <button data-layer="wind" class="active">WIND</button>
+        <button data-layer="gust">GUSTS</button>
+        <button data-layer="rain">RAIN</button>
+        <button data-layer="waves">WAVES</button>
+      </div>
+    </div>
+    <div class="map-wrap">
+      <div id="wxMap"></div>
+      <div class="map-legend" id="legend">
+        <div class="lTitle" id="legendTitle">Wind speed (kts)</div>
+        <div class="scale" id="legendScale"></div>
+        <div class="scaleLabels"><span id="legendMin">0</span><span id="legendMax">30</span></div>
+      </div>
+    </div>
+    <div class="footer">
+      <div id="footerLeft">Showing: —</div>
+      <div class="badge" id="footerRight">Open-Meteo · Leaflet · OSM</div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+/**
+ * Changes in this version (focused on ONE thing: timeline bars/icons):
+ * - Timeline bars are scaled by wind speed (variable height).
+ * - Each hour shows a wind-direction arrow rotated by wind dir.
+ * - Each hour shows a simple weather icon derived from weathercode.
+ *
+ * NOTE: Your /api/forecast should ideally request knots (windspeed_unit=kn),
+ * otherwise UI labels may not match the underlying units.
+ */
+
+const SPOTS = [
+  {name:"RMYS St Kilda Marina", lat:-37.8676, lon:144.9741},
+  {name:"Savages Wharf, Williamstown", lat:-37.8629, lon:144.9006},
+  {name:"Sandringham Yacht Club", lat:-37.9521, lon:145.0102},
+  {name:"Royal Brighton Yacht Club", lat:-37.9146, lon:144.9878},
+  {name:"Blairgowrie Yacht Squadron", lat:-38.3629, lon:144.7766}
+];
+
+let ACTIVE_SPOT = 0;
+let ACTIVE_DAY = 0;
+let ACTIVE_LAYER = "wind";
+let MAP, MARKER;
+let USING_CUSTOM_PIN = false;
+let CUSTOM_PIN = null;
+
+let FORECAST = [];
+
+function el(id){return document.getElementById(id);}
+function clamp(n,a,b){return Math.max(a,Math.min(b,n));}
+
+function showStatus(msg){
+  const n = el("statusMsg");
+  n.textContent = msg;
+  n.style.display = msg ? "block" : "none";
+}
+
+function labelForDay(dateStr, idx){
+  if(idx===0) return "Today";
+  if(idx===1) return "Tomorrow";
+  const dt = new Date(`${dateStr}T00:00:00`);
+  const weekday = dt.toLocaleDateString("en-AU", { weekday: "short" });
+  return `${weekday} ${dateStr.slice(8,10)}/${dateStr.slice(5,7)}`;
+}
+
+function degToCardinal(deg){
+  const dirs=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+  const idx=Math.round(((deg%360)+360)%360/22.5)%16;
+  return dirs[idx];
+}
+
+function wxEmoji(code){
+  // Open-Meteo weathercode mapping (coarse buckets only)
+  if(code===0) return "☀️";
+  if(code===1 || code===2) return "🌤️";
+  if(code===3) return "☁️";
+  if(code===45 || code===48) return "🌫️";
+  if((code>=51 && code<=57) || (code>=61 && code<=67) || (code>=80 && code<=82)) return "🌧️";
+  if(code>=71 && code<=77) return "❄️";
+  if(code>=95) return "⛈️";
+  return "•";
+}
+
+function ratingFromNow(now){
+  const wind=now.ws, gust=now.g, wave=now.wv ?? 0, dir=now.wd;
+  let score=0;
+  if(wind>=10 && wind<=18) score+=3;
+  else if(wind>=8 && wind<=22) score+=2;
+  else if(wind>=6) score+=1;
+
+  if((gust-wind)<=8) score+=2;
+  else if((gust-wind)<=12) score+=1;
+
+  if(wave<=0.6) score+=2;
+  else if(wave<=1.0) score+=1;
+
+  const goodDir = (dir>=150 && dir<=260);
+  if(goodDir) score+=2;
+
+  if(score>=8) return {label:"GREAT",color:"good",bars:4,desc:"Rearrange your day for this. Clean, steady wind in the ideal range, light gusts, flat-to-small chop, and a favourable direction."};
+  if(score>=6) return {label:"GOOD",color:"good",bars:3,desc:"Worth going. Conditions look solid with manageable variability."};
+  if(score>=4) return {label:"OKAY",color:"ok",bars:2,desc:"Sailable, but expect compromises (gusts, direction, or a bumpier surface)."};
+  return {label:"POOR",color:"bad",bars:1,desc:"Not ideal—consider delaying or keeping it short and close to home."};
+}
+
+function renderSpotPills(){
+  const wrap=el("spotPills");
+  wrap.innerHTML="";
+  SPOTS.forEach((s,i)=>{
+    const b=document.createElement("button");
+    b.className="pill"+(i===ACTIVE_SPOT?" active":"");
+    b.innerHTML=`<span class="dot"></span> ${s.name}`;
+    b.onclick=()=>{
+      USING_CUSTOM_PIN = false;
+      CUSTOM_PIN = null;
+      ACTIVE_SPOT=i;
+      ACTIVE_DAY=0;
+      loadAndRender();
+    };
+    wrap.appendChild(b);
+  });
+}
+
+function renderRating(r){
+  el("ratingLabel").textContent=r.label;
+  el("ratingLabel").style.color = r.color==="good"? "var(--good)" : (r.color==="ok" ? "var(--ok)" : "var(--bad)");
+  el("ratingSubtitle").textContent=r.desc;
+
+  const bars=el("ratingBars");bars.innerHTML="";
+  for(let i=0;i<5;i++){
+    const d=document.createElement("div");
+    d.className="bar"+(i<r.bars?" on":"");
+    if(i<r.bars){
+      d.style.background = r.color==="good"? "var(--good)" : (r.color==="ok" ? "var(--ok)" : "var(--bad)");
+    }
+    bars.appendChild(d);
+  }
+}
+
+function renderHero(day){
+  const now=day.hours[0] || {ws:0,g:0,wd:0,wv:0,wp:0};
+  const r=ratingFromNow(now);
+  renderRating(r);
+
+  el("heroDate").textContent = `${day.label} · ${(USING_CUSTOM_PIN ? "Custom map pin" : SPOTS[ACTIVE_SPOT].name)} · Intermediate`;
+
+  el("mWind").textContent = Math.round(now.ws||0);
+  el("mWindCard").textContent = degToCardinal(now.wd||0);
+  el("mGust").textContent = Math.round(now.g||0);
+
+  el("mWave").textContent = (now.wv!=null? (Math.round(now.wv*10)/10).toFixed(1):"—");
+  el("mPeriod").textContent = (now.wp!=null? Math.round(now.wp):"—");
+
+  el("mDirDeg").textContent = Math.round(now.wd||0);
+  el("mDirCard").textContent = `${degToCardinal(now.wd||0)}`;
+
+  el("mTmax").textContent = day.tmax!=null ? Math.round(day.tmax) : "—";
+  el("mTmin").textContent = day.tmin!=null ? Math.round(day.tmin) : "—";
+  el("mTempNote").textContent = day.rainSum!=null && day.rainSum>0 ? "Some rain expected" : "No rain expected";
+}
+
+function renderDayTabs(){
+  const tabs=el("dayTabs");tabs.innerHTML="";
+  FORECAST.forEach((d,i)=>{
+    const t=document.createElement("div");
+    t.className="tab"+(i===ACTIVE_DAY?" active":"");
+    t.innerHTML=`<span class="tDot"></span> ${d.label}`;
+    t.onclick=()=>{ACTIVE_DAY=i;renderAll();};
+    tabs.appendChild(t);
+  });
+}
+
+function colorForWind(ws){
+  if(ws>=10 && ws<=18) return "good";
+  if(ws>=7) return "ok";
+  return "bad";
+}
+
+function windHeightFactor(ws){
+  // map wind speed to [0.25..1.0] for bar height
+  const max = 26; // tune as you like
+  const v = clamp((ws||0) / max, 0, 1);
+  return 0.25 + v * 0.75;
+}
+
+function arrowSvg(){
+  return `
+    <span class="arrow">
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <path d="M12 2l6 8h-4v10h-4V10H6l6-8z"></path>
+      </svg>
+    </span>
+  `;
+}
+
+function renderTimeline(day){
+  const slots = day.hours.slice(0,16);
+  const hourLbls=el("hourLbls");
+  const barsRow=el("barsRow");
+  hourLbls.innerHTML="";
+  barsRow.innerHTML="";
+
+  slots.forEach((h, idx)=>{
+    const lab=document.createElement("div");
+    const hr = h.h;
+    const disp = (hr===12?"12p": (hr>12? (hr-12)+"p" : hr+"a"));
+    lab.textContent=disp;
+    hourLbls.appendChild(lab);
+
+    const b=document.createElement("div");
+    const c=colorForWind(h.ws);
+    b.className="tbar "+c;
+
+    // optional: add a single purple "highlight" bar sometimes (remove if you hate it)
+    // if(idx===10) b.classList.add("purple");
+
+    const hFactor = windHeightFactor(h.ws);
+    b.style.setProperty("--h", hFactor);
+
+    const rot = `${Math.round(h.wd||0)}deg`;
+    const wx = wxEmoji(h.code);
+
+    const waveTxt = (h.wv==null ? "—" : (Math.round(h.wv*10)/10).toFixed(1)) + " m";
+    const tempTxt = (h.t==null ? "—" : Math.round(h.t)) + "°c";
+    const rainTxt = (h.pr==null ? "—" : (Math.round(h.pr*10)/10).toFixed(1)) + " mm";
+
+    b.innerHTML = `
+      <div class="topRow" style="--rot:${rot}">
+        <span class="wxIcon">${wx}</span>
+        <span class="arrow" style="--rot:${rot}">
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path d="M12 2l6 8h-4v10h-4V10H6l6-8z"></path>
+          </svg>
+        </span>
+      </div>
+      <div class="val">${Math.round(h.ws||0)}</div>
+    `;
+    b.tabIndex = 0;
+    b.role = "button";
+    b.setAttribute("aria-label", `${disp}, wind ${Math.round(h.ws||0)} knots, gust ${Math.round(h.g||0)} knots, waves ${waveTxt}, rain ${rainTxt}, direction ${Math.round(h.wd||0)} degrees`);
+    b.title = `${hr}:00 · Wind ${Math.round(h.ws||0)} kts · Gust ${Math.round(h.g||0)} kts · Dir ${Math.round(h.wd||0)}° · Code ${h.code}`;
+    b.addEventListener("keydown", (event)=>{
+      if(event.key === "Enter" || event.key === " "){
+        event.preventDefault();
+        alert(`${disp}\nWind: ${Math.round(h.ws||0)} kts\nGust: ${Math.round(h.g||0)} kts\nWaves: ${waveTxt}\nTemp: ${tempTxt}\nRain: ${rainTxt}\nDir: ${Math.round(h.wd||0)}° (${degToCardinal(h.wd||0)})`);
+      }
+    });
+    barsRow.appendChild(b);
+  });
+
+  const best = buildDaySummary(day);
+  el("bestSummary").textContent = best.summary;
+  el("bestWindow").textContent  = best.window;
+
+  el("timelineNote").textContent = `Bars scaled by wind speed · Arrow = wind direction`;
+}
+
+function buildDaySummary(day) {
+  const slots = day.hours.slice(0, 16);
+  if (!slots.length) return { summary: "No forecast data available for this day.", window: "—" };
+
+  // ── helpers ──────────────────────────────────────────────────────────────
+  const fmtH = h => {
+    if (h === 12) return "12pm";
+    if (h === 0 || h === 24) return "midnight";
+    return h > 12 ? `${h - 12}pm` : `${h}am`;
+  };
+
+  // ── aggregate stats ───────────────────────────────────────────────────────
+  const winds   = slots.map(h => h.ws || 0);
+  const gusts   = slots.map(h => h.g  || 0);
+  const waves   = slots.map(h => h.wv ?? 0);
+  const dirs    = slots.map(h => h.wd || 0);
+  const codes   = slots.map(h => h.code || 0);
+
+  const maxWind  = Math.max(...winds);
+  const minWind  = Math.min(...winds);
+  const maxGust  = Math.max(...gusts);
+  const maxWave  = Math.max(...waves);
+  const avgWind  = Math.round(winds.reduce((a, b) => a + b, 0) / winds.length);
+
+  // dominant direction = mode of 45° buckets
+  const dirBuckets = {};
+  dirs.forEach(d => {
+    const b = Math.round(d / 45) * 45 % 360;
+    dirBuckets[b] = (dirBuckets[b] || 0) + 1;
+  });
+  const domDir = parseInt(Object.entries(dirBuckets).sort((a, b) => b[1] - a[1])[0][0]);
+  const domCard = degToCardinal(domDir);
+
+  // weather character
+  const hasThunder = codes.some(c => c >= 95);
+  const hasRain    = codes.some(c => (c >= 51 && c <= 67) || (c >= 80 && c <= 82)) || (day.rainSum != null && day.rainSum > 1);
+  const hasCloud   = codes.some(c => c >= 2);
+  const hasFog     = codes.some(c => c === 45 || c === 48);
+
+  // building / dying pattern — compare morning vs afternoon average wind
+  const morning   = slots.filter(h => h.h >= 6  && h.h <= 11).map(h => h.ws || 0);
+  const afternoon = slots.filter(h => h.h >= 13 && h.h <= 18).map(h => h.ws || 0);
+  const avgMorn   = morning.length   ? morning.reduce((a, b) => a + b, 0)   / morning.length   : 0;
+  const avgAftn   = afternoon.length ? afternoon.reduce((a, b) => a + b, 0) / afternoon.length : 0;
+  const isBuilding = avgAftn > avgMorn + 3;
+  const isDying    = avgMorn > avgAftn + 3;
+  const isSteady   = !isBuilding && !isDying;
+
+  // gustiness character
+  const avgGustDiff = slots.reduce((s, h) => s + ((h.g || 0) - (h.ws || 0)), 0) / slots.length;
+  const isGusty = avgGustDiff > 10;
+
+  // sea state character
+  const choppy = maxWave > 0.8;
+  const rough  = maxWave > 1.5;
+
+  // good hours = wind 8–22 kt (broad "sailable" range, direction-agnostic for now)
+  const goodSlots = slots.filter(h => (h.ws || 0) >= 8 && (h.ws || 0) <= 22);
+  const lightSlots = slots.filter(h => (h.ws || 0) < 6);
+  const tooStrongSlots = slots.filter(h => (h.ws || 0) > 25);
+
+  // ── best 2–4 hour window ─────────────────────────────────────────────────
+  let bestWin = null;
+  let bestScore = -1;
+
+  for (let winLen = 4; winLen >= 2; winLen--) {
+    for (let i = 0; i <= slots.length - winLen; i++) {
+      const slice = slots.slice(i, i + winLen);
+      // all hours in window must be in sailable range
+      if (slice.some(h => (h.ws || 0) < 7 || (h.ws || 0) > 25)) continue;
+      // score = avg wind closeness to 14kt sweet spot, penalise gusts & waves
+      const score = slice.reduce((s, h) => {
+        const windScore  = 10 - Math.abs((h.ws || 0) - 14) * 0.5;
+        const gustPen    = Math.max(0, ((h.g || 0) - (h.ws || 0)) - 8) * 0.3;
+        const wavePen    = Math.max(0, (h.wv || 0) - 0.6) * 2;
+        return s + windScore - gustPen - wavePen;
+      }, 0) / winLen;
+      if (score > bestScore) {
+        bestScore = score;
+        bestWin   = { start: slice[0].h, end: slice[winLen - 1].h, len: winLen };
+      }
+    }
+    if (bestWin) break;
+  }
+
+  const windowStr = bestWin
+    ? `Best window: ${fmtH(bestWin.start)}–${fmtH(bestWin.end + 1)}`
+    : "No good window today";
+
+  // ── build sentence 1: overall character ──────────────────────────────────
+  let s1 = "";
+
+  if (hasThunder) {
+    s1 = "Thunderstorms in the forecast — stay ashore and keep a close eye on updates.";
+  } else if (lightSlots.length >= 10) {
+    s1 = `A mostly light-wind day with ${avgWind}kt average — not enough pressure to get the most out of a sail.`;
+  } else if (tooStrongSlots.length >= 6) {
+    s1 = `Strong ${domCard} winds topping out at ${maxWind}kt make this a day for experienced sailors only.`;
+  } else if (hasRain && isBuilding) {
+    s1 = `A wet start with ${domCard} winds building through the day to ${maxWind}kt by afternoon.`;
+  } else if (hasRain) {
+    s1 = `Rain in the mix with ${domCard} winds averaging ${avgWind}kt — sailable but not pretty.`;
+  } else if (isBuilding) {
+    s1 = `Classic ${domCard} sea breeze pattern — light in the morning, building to ${maxWind}kt in the afternoon.`;
+  } else if (isDying) {
+    s1 = `${domCard} winds start strong at ${maxWind}kt and ease off through the afternoon.`;
+  } else if (isSteady && !isGusty) {
+    s1 = `Steady ${domCard} winds around ${avgWind}kt through the day — consistent and reliable conditions.`;
+  } else if (isGusty) {
+    s1 = `${domCard} winds averaging ${avgWind}kt but gusty — expect spikes to ${maxGust}kt, so reef conservatively.`;
+  } else {
+    s1 = `${domCard} winds in the ${minWind}–${maxWind}kt range through the day.`;
+  }
+
+  // ── build sentence 2: sea state + best window ────────────────────────────
+  let s2 = "";
+
+  const waveDesc = rough   ? `rough chop up to ${maxWave.toFixed(1)}m` :
+                   choppy  ? `choppy surface around ${maxWave.toFixed(1)}m` :
+                   maxWave > 0.3 ? `small chop around ${maxWave.toFixed(1)}m` :
+                   "flat water";
+
+  if (bestWin) {
+    s2 = `${waveDesc.charAt(0).toUpperCase() + waveDesc.slice(1)} on the bay — best sailing ${fmtH(bestWin.start)} to ${fmtH(bestWin.end + 1)}.`;
+  } else if (lightSlots.length >= 10 || hasThunder) {
+    s2 = `${waveDesc.charAt(0).toUpperCase() + waveDesc.slice(1)} — no reliable window worth planning around today.`;
+  } else {
+    s2 = `${waveDesc.charAt(0).toUpperCase() + waveDesc.slice(1)} across the bay.`;
+  }
+
+  return {
+    summary: `${s1} ${s2}`.trim(),
+    window:  `⛵ ${windowStr}`
+  };
+}
+
+function legendConfig(layer){
+  if(layer==="wind") return {title:"Wind speed (kts)", min:0, max:30};
+  if(layer==="gust") return {title:"Gusts (kts)", min:0, max:40};
+  if(layer==="rain") return {title:"Rain (mm/hr)", min:0, max:6};
+  if(layer==="waves") return {title:"Waves (m)", min:0, max:2};
+  return {title:"",min:0,max:1};
+}
+
+function renderLegend(){
+  const cfg=legendConfig(ACTIVE_LAYER);
+  el("legendTitle").textContent=cfg.title;
+  el("legendMin").textContent=cfg.min;
+  el("legendMax").textContent=cfg.max;
+
+  const scale=el("legendScale");scale.innerHTML="";
+  for(let i=0;i<10;i++){
+    const s=document.createElement("span");
+    s.style.background = `rgba(37,99,235,${0.08 + i*0.07})`;
+    scale.appendChild(s);
+  }
+}
+
+function renderFooter(day){
+  const locationName = USING_CUSTOM_PIN ? "Custom map pin" : SPOTS[ACTIVE_SPOT].name;
+  el("footerLeft").textContent = `Showing: ${day.label} · ${locationName}`;
+}
+
+function initMap(){
+  if(MAP) return;
+
+  const s = SPOTS[ACTIVE_SPOT];
+  MAP = L.map("wxMap", {zoomControl:true}).setView([s.lat, s.lon], 10);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18,
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(MAP);
+
+  MARKER = L.marker([s.lat, s.lon]).addTo(MAP);
+
+  MAP.on("click", (e)=>{
+    const {lat,lng}=e.latlng;
+    MARKER.setLatLng([lat,lng]);
+    USING_CUSTOM_PIN = true;
+    CUSTOM_PIN = {lat, lon: lng};
+    ACTIVE_DAY = 0;
+    loadAndRender();
+  });
+
+  document.querySelectorAll(".layerBtns button").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      document.querySelectorAll(".layerBtns button").forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      ACTIVE_LAYER = btn.dataset.layer;
+      renderLegend();
+      updateMarkerPopup();
+    });
+  });
+}
+
+function updateMarkerPopup(){
+  if(!MAP || !MARKER || !FORECAST.length) return;
+  const day=FORECAST[ACTIVE_DAY];
+  if(!day || !day.hours || !day.hours.length) return;
+  const h=day.hours[0];
+  const cfg=legendConfig(ACTIVE_LAYER);
+
+  let val="—";
+  if(ACTIVE_LAYER==="wind") val = `${Math.round(h.ws||0)} kts`;
+  if(ACTIVE_LAYER==="gust") val = `${Math.round(h.g||0)} kts`;
+  if(ACTIVE_LAYER==="rain") val = `${(h.pr!=null? (Math.round(h.pr*10)/10):0)} mm`;
+  if(ACTIVE_LAYER==="waves") val = `${(h.wv!=null? (Math.round(h.wv*10)/10).toFixed(1):"—")} m`;
+
+  MARKER.bindPopup(
+    `<b>${USING_CUSTOM_PIN ? "Custom map pin" : SPOTS[ACTIVE_SPOT].name}</b><br>${cfg.title}: <b>${val}</b><br>Dir: ${Math.round(h.wd||0)}° (${degToCardinal(h.wd||0)})`
+  );
+}
+
+async function loadLiveForecast(lat, lon) {
+  const res = await fetch(`/api/forecast?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`);
+  const text = await res.text();
+  if(!res.ok) throw new Error(`API ${res.status}: ${text.slice(0,200)}`);
+  const data = JSON.parse(text);
+
+  if(!data || !data.hourly || !Array.isArray(data.hourly.time)) {
+    throw new Error("Malformed /api/forecast response (missing hourly.time)");
+  }
+
+  const days={};
+  data.hourly.time.forEach((time,i)=>{
+    const date=time.slice(0,10), hour=parseInt(time.slice(11,13),10);
+    if(!days[date])days[date]={date,hours:[]};
+    if(hour>=5&&hour<=22){
+      days[date].hours.push({
+        h:hour,
+        t:Math.round(data.hourly.temperature_2m?.[i] ?? 0),
+        ws:Math.round(data.hourly.wind_speed_10m?.[i] ?? 0),
+        wd:Math.round(data.hourly.wind_direction_10m?.[i] ?? 0),
+        g:Math.round(data.hourly.wind_gusts_10m?.[i] ?? 0),
+        pr:(data.hourly.precipitation?.[i] ?? 0),
+        cc:(data.hourly.cloud_cover?.[i] ?? 0),
+        code:(data.hourly.weathercode?.[i] ?? 0),
+        wv:(data.hourly.wave_height?.[i] ?? null),
+        wp:(data.hourly.wave_period?.[i] ?? null),
+        wvd:(data.hourly.wave_direction?.[i] ?? null)
+      });
+    }
+  });
+
+  if(data.daily && Array.isArray(data.daily.time)){
+    data.daily.time.forEach((d,di)=>{
+      if(!days[d]) return;
+      days[d].tmax = data.daily.temperature_2m_max?.[di] ?? null;
+      days[d].tmin = data.daily.temperature_2m_min?.[di] ?? null;
+      days[d].rainSum = data.daily.precipitation_sum?.[di] ?? null;
+    });
+  }
+
+  const dayKeys = Object.keys(days).sort();          // ✅ chronological by YYYY-MM-DD
+const arr = dayKeys.slice(0, 7).map(k => days[k]); // ✅ next 7 days deterministically
+
+arr.forEach((d,i)=>{
+  d.label = labelForDay(d.date, i);
+
+  d.hours.sort((a,b)=>a.h-b.h);
+  d.hours = d.hours.filter(h=>h.h>=5 && h.h<=20);
+
+  // if the day became empty after filtering, keep it but with empty hours
+  if(d.hours.length>16) d.hours = d.hours.slice(0,16);
+});
+
+return arr;
+
+}
+
+async function loadAndRender(){
+  initMap();
+  showStatus("");
+
+  const s=SPOTS[ACTIVE_SPOT];
+  const point = USING_CUSTOM_PIN && CUSTOM_PIN ? CUSTOM_PIN : {lat: s.lat, lon: s.lon};
+  MAP.setView([point.lat, point.lon], 10);
+  MARKER.setLatLng([point.lat, point.lon]);
+  try {
+    const arr = await loadLiveForecast(point.lat, point.lon);
+    FORECAST = arr;
+    if(!FORECAST.length){
+      showStatus("No forecast data returned for this location yet. Please try another spot.");
+      renderAll();
+      return;
+    }
+    ACTIVE_DAY = clamp(ACTIVE_DAY,0,FORECAST.length-1);
+    renderAll();
+  } catch (err) {
+    console.error(err);
+    FORECAST = [];
+    showStatus("Unable to load forecast data right now. Please retry in a moment.");
+    renderAll();
+  }
+}
+
+function renderAll(){
+  renderSpotPills();
+  renderDayTabs();
+  const day=FORECAST[ACTIVE_DAY];
+  if(!day){
+    el("heroDate").textContent = "No forecast available";
+    el("ratingLabel").textContent = "—";
+    el("ratingSubtitle").textContent = "Forecast data is currently unavailable.";
+    el("mWind").textContent = "—";
+    el("mWindCard").textContent = "—";
+    el("mGust").textContent = "—";
+    el("mWave").textContent = "—";
+    el("mPeriod").textContent = "—";
+    el("mDirDeg").textContent = "—";
+    el("mDirCard").textContent = "—";
+    el("mTmax").textContent = "—";
+    el("mTmin").textContent = "—";
+    el("mTempNote").textContent = "—";
+    el("hourLbls").innerHTML = "";
+    el("barsRow").innerHTML = "";
+    el("timelineNote").textContent = "No hourly data";
+    el("bestSummary").textContent = "Forecast data is currently unavailable.";
+    el("bestWindow").textContent  = "⛵ —";
+    el("footerLeft").textContent = "Showing: —";
+    renderLegend();
+    return;
+  }
+  renderHero(day);
+  renderTimeline(day);
+  renderLegend();
+  renderFooter(day);
+  updateMarkerPopup();
+}
+
+document.getElementById("btnMapPin").addEventListener("click", ()=>{
+  alert("Map pin mode: click the map to move the marker and load forecast for that pin.");
+});
+
+renderSpotPills();
+initMap();
+renderLegend();
+loadAndRender();
+</script>
+</body>
+</html>
